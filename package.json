@@ -1,0 +1,10 @@
+{
+  "name": "cutline-studio-word-addin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cutline Studio Word Add-in",
+  "scripts": {
+    "start": "echo 'Server is managed by the powershell script.'",
+    "dev-server": "echo 'Server is managed by the powershell script.'"
+  }
+}

@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Cutline Studio</title>
+  <meta name="description" content="Arrange photos in a printable grid, then export to PDF or Word. Everything runs locally in your browser — nothing is uploaded." />
+  <meta name="theme-color" content="#0a84ff" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Cutline Studio" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Icon set: <svg class="icon"><use href="#i-name"/></svg> -->
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-photos" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4.5 17.5l4.8-4.6a1.2 1.2 0 0 1 1.7 0l2.2 2.1 2.6-2.5a1.2 1.2 0 0 1 1.7 0l2.9 2.8"/></symbol>
+    <symbol id="i-crop" viewBox="0 0 24 24"><path d="M6.5 2.5v13.5a1.5 1.5 0 0 0 1.5 1.5h13.5"/><path d="M2.5 6.5h13.5a1.5 1.5 0 0 1 1.5 1.5v13.5"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-borders" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="1.5" stroke-dasharray="3.2 2.6"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-footer" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7.5h7M8.5 11h4.5" opacity=".45"/><path d="M8.5 17h7"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 3.5v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5v-11"/><path d="M7.5 9 12 4.5 16.5 9"/><path d="M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2"/><path d="M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12"/><path d="M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-portrait" viewBox="0 0 24 24"><rect x="6.5" y="3.5" width="11" height="17" rx="1.5"/></symbol>
+    <symbol id="i-landscape" viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="17" height="11" rx="1.5"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4.5H15"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4v4.5H9"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
+    <symbol id="i-install" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M12 7v5M9.8 9.8 12 12l2.2-2.2"/></symbol>
+    <symbol id="i-warning" viewBox="0 0 24 24"><path d="M10.3 4.9 2.9 17.8A2 2 0 0 0 4.6 20.8h14.8a2 2 0 0 0 1.7-3L13.7 4.9a2 2 0 0 0-3.4 0z"/><path d="M12 10v4.2M12 17.2v.2"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3.5H7a1.5 1.5 0 0 0-1.5 1.5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 13h6M9 16.5h4"/></symbol>
+    <symbol id="i-align-left" viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></symbol>
+    <symbol id="i-align-center" viewBox="0 0 24 24"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></symbol>
+    <symbol id="i-align-right" viewBox="0 0 24 24"><path d="M4 6h16M10 10h10M4 14h16M10 18h10"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <defs>
+          <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#00c4cc"/><stop offset="1" stop-color="#7d2ae8"/>
+          </linearGradient>
+        </defs>
+        <rect width="32" height="32" rx="9" fill="#fff"/>
+        <g fill="url(#brandGrad)">
+          <rect x="7" y="7" width="8" height="8" rx="2"/><rect x="17" y="7" width="8" height="8" rx="2"/>
+          <rect x="7" y="17" width="8" height="8" rx="2"/><rect x="17" y="17" width="8" height="8" rx="2"/>
+        </g>
+      </svg>
+      <span class="brand-name">Cutline Studio</span>
+    </div>
+    <span class="privacy-badge" title="Images are processed entirely on this device. No upload, no server, no analytics.">
+      <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+      <span class="privacy-text">100% local — your photos never leave this device</span>
+    </span>
+    <span class="topbar-status" id="statusBar" role="status" aria-live="polite">Drop photos anywhere to begin</span>
+    <div class="topbar-actions">
+      <button id="btnInstall" type="button" class="topbar-btn" hidden>
+        <svg class="icon" aria-hidden="true"><use href="#i-install"/></svg><span>Install app</span>
+      </button>
+      <span class="net-indicator" id="netIndicator" title=""></span>
+      <button id="btnExportOpen" type="button" class="topbar-btn topbar-btn-primary" aria-haspopup="dialog" aria-expanded="false" aria-controls="exportCard">
+        <svg class="icon" aria-hidden="true"><use href="#i-export"/></svg><span>Export</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- iOS Safari install help (Safari doesn't support beforeinstallprompt) -->
+  <div class="ios-install-tip" id="iosInstallTip" hidden>
+    <span>To install: tap the <strong>Share</strong> button, then <strong>Add to Home Screen</strong>.</span>
+    <button id="btnDismissIosTip" type="button" class="icon-btn" aria-label="Dismiss">
+      <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </div>
+
+  <main class="studio" id="dropTarget">
+    <!-- Tool rail -->
+    <nav class="rail" aria-label="Tools">
+      <button type="button" class="rail-btn" data-panel="photos" aria-pressed="true" aria-controls="panel">
+        <svg class="icon" aria-hidden="true"><use href="#i-photos"/></svg><span>Photos</span>
+      </button>
+      <button type="button" class="rail-btn" data-panel="crop" aria-pressed="false" aria-controls="panel">
+        <svg class="icon" aria-hidden="true"><use href="#i-crop"/></svg><span>Crop</span>
+      </button>
+      <button type="button" class="rail-btn" data-panel="layout" aria-pressed="false" aria-controls="panel">
+        <svg class="icon" aria-hidden="true"><use href="#i-layout"/></svg><span>Layout</span>
+      </button>
+      <button type="button" class="rail-btn" data-panel="borders" aria-pressed="false" aria-controls="panel">
+        <svg class="icon" aria-hidden="true"><use href="#i-borders"/></svg><span>Borders</span>
+      </button>
+      <button type="button" class="rail-btn" data-panel="footer" aria-pressed="false" aria-controls="panel">
+        <svg class="icon" aria-hidden="true"><use href="#i-footer"/></svg><span>Footer</span>
+      </button>
+    </nav>
+
+    <!-- Side panel: one view per rail tool -->
+    <aside class="panel" id="panel" aria-label="Tool options">
+
+      <!-- Photos -->
+      <section class="panel-view" data-view="photos">
+        <header class="panel-head">
+          <h2>Photos <span class="count-pill" id="photoCount">0</span></h2>
+          <button type="button" class="icon-btn" data-close-panel aria-label="Hide panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+          </button>
+        </header>
+        <div class="panel-body">
+          <button id="btnAdd" type="button" class="btn btn-primary btn-block btn-lg">
+            <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>Upload photos
+          </button>
+          <p class="hint">Or drop JPG, PNG, HEIC, WebP or AVIF files anywhere in the window.</p>
+          <ol class="filelist" id="fileList" tabindex="0" aria-label="Photo list"></ol>
+          <div class="empty-state" id="photosEmpty">
+            <svg class="icon" aria-hidden="true"><use href="#i-photos"/></svg>
+            <p>No photos yet</p>
+          </div>
+          <div class="btn-row">
+            <button id="btnUp" type="button" class="btn btn-secondary" title="Move earlier (Ctrl/⌘ + ↑)">
+              <svg class="icon" aria-hidden="true"><use href="#i-up"/></svg>Up
+            </button>
+            <button id="btnDown" type="button" class="btn btn-secondary" title="Move later (Ctrl/⌘ + ↓)">
+              <svg class="icon" aria-hidden="true"><use href="#i-down"/></svg>Down
+            </button>
+            <button id="btnRemove" type="button" class="btn btn-secondary btn-danger-text" title="Remove (Delete)">
+              <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Remove
+            </button>
+          </div>
+          <button id="btnClear" type="button" class="btn btn-ghost btn-block">Clear all</button>
+          <input type="file" id="fileInput" accept="image/*,.heic,.heif,.avif" multiple hidden />
+        </div>
+      </section>
+
+      <!-- Crop -->
+      <section class="panel-view" data-view="crop" hidden>
+        <header class="panel-head">
+          <h2>Crop</h2>
+          <button type="button" class="icon-btn" data-close-panel aria-label="Hide panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+          </button>
+        </header>
+        <div class="panel-body">
+          <div class="crop-editor" id="cropEditor" hidden>
+            <p class="panel-sub" id="cropName"></p>
+            <div class="crop-frame" id="cropFrame">
+              <div class="crop-image" id="cropImage"></div>
+              <div class="crop-thirds" aria-hidden="true"></div>
+            </div>
+            <p class="hint">Drag the photo to choose what shows in the cell. Scroll to zoom.</p>
+            <div class="field">
+              <div class="field-row">
+                <label for="ctlCropZoom">Zoom</label>
+                <output class="value-box" id="zoomLabel" for="ctlCropZoom">100%</output>
+              </div>
+              <div class="slider-row">
+                <button id="btnZoomOut" type="button" class="icon-btn" aria-label="Zoom out">
+                  <svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg>
+                </button>
+                <input type="range" id="ctlCropZoom" min="100" max="400" step="1" value="100" />
+                <button id="btnZoomIn" type="button" class="icon-btn" aria-label="Zoom in">
+                  <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+                </button>
+              </div>
+            </div>
+            <button id="btnResetCrop" type="button" class="btn btn-secondary btn-block">
+              <svg class="icon" aria-hidden="true"><use href="#i-reset"/></svg>Reset crop
+            </button>
+          </div>
+          <div class="empty-state" id="cropEmpty">
+            <svg class="icon" aria-hidden="true"><use href="#i-crop"/></svg>
+            <p id="cropEmptyText">Select a photo to crop it.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Layout -->
+      <section class="panel-view" data-view="layout" hidden>
+        <header class="panel-head">
+          <h2>Layout</h2>
+          <button type="button" class="icon-btn" data-close-panel aria-label="Hide panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+          </button>
+        </header>
+        <div class="panel-body">
+          <h3 class="section-title">Grid</h3>
+          <div class="field-pair">
+            <label class="field">
+              <span class="field-label">Columns</span>
+              <input id="ctlCols" class="input" type="number" min="1" max="30" value="4" inputmode="numeric" />
+            </label>
+            <label class="field">
+              <span class="field-label">Rows</span>
+              <input id="ctlRows" class="input" type="number" min="1" max="30" value="5" inputmode="numeric" />
+            </label>
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label for="ctlCellCm">Cell size</label>
+              <span class="value-box"><input id="ctlCellCmNum" type="number" min="1" max="20" step="0.1" value="4.4" aria-label="Cell size in centimetres" /><span>cm</span></span>
+            </div>
+            <input id="ctlCellCm" type="range" min="1" max="20" step="0.1" value="4.4" />
+          </div>
+
+          <h3 class="section-title">Page</h3>
+          <label class="field">
+            <span class="field-label">Paper size</span>
+            <select id="ctlPage" class="input">
+              <option value="A4">A4</option>
+              <option value="Letter">Letter</option>
+              <option value="Legal">Legal</option>
+            </select>
+          </label>
+          <div class="field">
+            <div class="field-row">
+              <span class="field-label">Orientation</span>
+              <span class="tag" data-orient-target>All pages</span>
+            </div>
+            <div class="segmented" role="radiogroup" aria-label="Orientation">
+              <label><input type="radio" name="orientPanel" value="portrait" data-orient /><span><svg class="icon" aria-hidden="true"><use href="#i-portrait"/></svg>Portrait</span></label>
+              <label><input type="radio" name="orientPanel" value="landscape" data-orient /><span><svg class="icon" aria-hidden="true"><use href="#i-landscape"/></svg>Landscape</span></label>
+            </div>
+            <label class="check">
+              <input type="checkbox" data-orient-all checked />
+              <span>Apply to all pages</span>
+            </label>
+            <p class="hint" data-orient-hint>Untick to change only the selected page.</p>
+          </div>
+
+          <h3 class="section-title">Spacing</h3>
+          <div class="field">
+            <div class="field-row">
+              <label for="ctlMargin">Margins</label>
+              <span class="value-box"><input id="ctlMarginNum" type="number" min="0" max="40" step="1" value="12" aria-label="Margins in millimetres" /><span>mm</span></span>
+            </div>
+            <input id="ctlMargin" type="range" min="0" max="40" step="1" value="12" />
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label for="ctlSpacing">Gap between photos</label>
+              <span class="value-box"><input id="ctlSpacingNum" type="number" min="0" max="20" step="1" value="3" aria-label="Gap in millimetres" /><span>mm</span></span>
+            </div>
+            <input id="ctlSpacing" type="range" min="0" max="20" step="1" value="3" />
+          </div>
+
+          <h3 class="section-title">Options</h3>
+          <label class="check">
+            <input id="ctlSquareCrop" type="checkbox" checked />
+            <span>Crop photos to fill their cells</span>
+          </label>
+          <label class="check">
+            <input id="ctlTrim" type="checkbox" checked />
+            <span>Trim unused rows on the last page</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Borders -->
+      <section class="panel-view" data-view="borders" hidden>
+        <header class="panel-head">
+          <h2>Borders</h2>
+          <button type="button" class="icon-btn" data-close-panel aria-label="Hide panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+          </button>
+        </header>
+        <div class="panel-body">
+          <label class="switch-row">
+            <span class="switch-text"><strong>Cell borders</strong><small>Lines around every cell, in the preview, PDF and Word file.</small></span>
+            <input id="ctlBorders" type="checkbox" role="switch" class="switch" />
+          </label>
+          <div class="options-block" id="borderOptions">
+            <h3 class="section-title">Style</h3>
+            <div class="style-grid" id="borderStyleList" role="radiogroup" aria-label="Border style"></div>
+            <h3 class="section-title">Colour</h3>
+            <div class="swatches" id="borderSwatches" role="radiogroup" aria-label="Border colour"></div>
+            <p class="hint" data-word-note>Word draws the zig-zag styles as smooth waves.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <section class="panel-view" data-view="footer" hidden>
+        <header class="panel-head">
+          <h2>Footer</h2>
+          <button type="button" class="icon-btn" data-close-panel aria-label="Hide panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+          </button>
+        </header>
+        <div class="panel-body">
+          <label class="switch-row">
+            <span class="switch-text"><strong>File name footer</strong><small>When you save, the name you give the file is printed at the bottom of every page.</small></span>
+            <input id="ctlFooter" type="checkbox" role="switch" class="switch" data-footer-toggle checked />
+          </label>
+          <div class="options-block" id="footerOptions">
+            <div class="footer-sample" id="footerSample"><span>File name</span></div>
+            <h3 class="section-title">Font</h3>
+            <div class="chip-grid chip-grid-3" role="radiogroup" aria-label="Footer font">
+              <label class="chip"><input type="radio" name="footerFont" value="sans" checked /><span><b class="font-sans">Aa</b><small>Sans serif</small></span></label>
+              <label class="chip"><input type="radio" name="footerFont" value="serif" /><span><b class="font-serif">Aa</b><small>Serif</small></span></label>
+              <label class="chip"><input type="radio" name="footerFont" value="mono" /><span><b class="font-mono">Aa</b><small>Monospace</small></span></label>
+            </div>
+            <div class="field">
+              <div class="field-row">
+                <label for="ctlFooterSize">Size</label>
+                <span class="value-box"><input id="ctlFooterSizeNum" type="number" min="6" max="28" step="0.5" value="10" aria-label="Footer size in points" /><span>pt</span></span>
+              </div>
+              <input id="ctlFooterSize" type="range" min="6" max="28" step="0.5" value="10" />
+            </div>
+            <h3 class="section-title">Style</h3>
+            <div class="text-tools">
+              <button type="button" class="tool-toggle" id="btnFooterBold" aria-pressed="false" title="Bold"><b>B</b></button>
+              <button type="button" class="tool-toggle" id="btnFooterItalic" aria-pressed="false" title="Italic"><i>I</i></button>
+              <span class="tools-divider" aria-hidden="true"></span>
+              <div class="segmented segmented-icons" role="radiogroup" aria-label="Footer alignment">
+                <label title="Align left"><input type="radio" name="footerAlign" value="left" /><span><svg class="icon" aria-hidden="true"><use href="#i-align-left"/></svg><span class="sr-only">Left</span></span></label>
+                <label title="Centre"><input type="radio" name="footerAlign" value="center" checked /><span><svg class="icon" aria-hidden="true"><use href="#i-align-center"/></svg><span class="sr-only">Centre</span></span></label>
+                <label title="Align right"><input type="radio" name="footerAlign" value="right" /><span><svg class="icon" aria-hidden="true"><use href="#i-align-right"/></svg><span class="sr-only">Right</span></span></label>
+              </div>
+            </div>
+            <h3 class="section-title">Colour</h3>
+            <div class="swatches" id="footerSwatches" role="radiogroup" aria-label="Footer colour"></div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Workspace: toolbar, canvas, bottom bar -->
+    <section class="workspace">
+      <div class="context-bar" id="contextBar">
+        <div class="ctx-group ctx-photo" id="ctxPhoto">
+          <span class="ctx-thumb" id="ctxThumb" aria-hidden="true"></span>
+          <span class="ctx-name" id="ctxName">No photo selected</span>
+          <span class="ctx-divider" aria-hidden="true"></span>
+          <button type="button" class="ctx-btn" id="ctxCrop"><svg class="icon" aria-hidden="true"><use href="#i-crop"/></svg><span>Crop</span></button>
+          <button type="button" class="ctx-btn" id="ctxUp" title="Move earlier" aria-label="Move earlier"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+          <button type="button" class="ctx-btn" id="ctxDown" title="Move later" aria-label="Move later"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+          <button type="button" class="ctx-btn ctx-danger" id="ctxRemove" title="Remove photo" aria-label="Remove photo"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
+        </div>
+        <div class="ctx-group ctx-page">
+          <span class="ctx-label" data-orient-ctx>Orientation</span>
+          <div class="segmented segmented-compact" role="radiogroup" aria-label="Page orientation">
+            <label title="Portrait"><input type="radio" name="orientBar" value="portrait" data-orient /><span><svg class="icon" aria-hidden="true"><use href="#i-portrait"/></svg><span class="seg-text">Portrait</span></span></label>
+            <label title="Landscape"><input type="radio" name="orientBar" value="landscape" data-orient /><span><svg class="icon" aria-hidden="true"><use href="#i-landscape"/></svg><span class="seg-text">Landscape</span></span></label>
+          </div>
+          <label class="check check-compact">
+            <input type="checkbox" data-orient-all checked />
+            <span>All pages</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="canvas" id="previewScroll">
+        <div class="preview-stack" id="previewStack"></div>
+      </div>
+
+      <footer class="bottom-bar">
+        <div class="pager">
+          <button type="button" class="icon-btn" id="btnPagePrev" aria-label="Previous page">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+          </button>
+          <span id="pagerLabel">Page 1 of 1</span>
+          <button type="button" class="icon-btn" id="btnPageNext" aria-label="Next page">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+          </button>
+        </div>
+        <div class="fit-warning" id="fitWarning" hidden>
+          <svg class="icon" aria-hidden="true"><use href="#i-warning"/></svg><span id="fitWarningText"></span>
+        </div>
+        <div class="zoom-ctl">
+          <input type="range" id="ctlViewZoom" min="10" max="300" step="1" value="100" aria-label="Zoom" />
+          <output id="outViewZoom" for="ctlViewZoom">100%</output>
+          <button type="button" class="icon-btn" id="btnFit" title="Fit page to window" aria-label="Fit page to window">
+            <svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg>
+          </button>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <!-- Export card -->
+  <div class="popover export-card" id="exportCard" role="dialog" aria-labelledby="exportTitle" hidden>
+    <header class="card-head">
+      <h2 id="exportTitle">Export</h2>
+      <button type="button" class="icon-btn" id="btnExportClose" aria-label="Close">
+        <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+      </button>
+    </header>
+    <div class="card-body">
+      <h3 class="section-title">File type</h3>
+      <div class="choice-grid" role="radiogroup" aria-label="File type">
+        <label class="choice">
+          <input type="radio" name="exportFormat" value="pdf" checked />
+          <span><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg><b>PDF</b><small>Best for printing</small></span>
+        </label>
+        <label class="choice">
+          <input type="radio" name="exportFormat" value="docx" />
+          <span><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg><b>Word</b><small>Editable .docx</small></span>
+        </label>
+      </div>
+
+      <label class="switch-row">
+        <span class="switch-text"><strong>Compress images</strong><small>Removes the parts of each photo outside its crop and shrinks it to its printed size. Recommended for 10 or more photos.</small></span>
+        <input id="ctlCompress" type="checkbox" role="switch" class="switch" checked />
+      </label>
+      <div class="chip-grid chip-grid-3" id="qualityChips" role="radiogroup" aria-label="Image quality">
+        <label class="chip"><input type="radio" name="quality" value="print" checked /><span><b>Print</b><small>300 DPI</small></span></label>
+        <label class="chip"><input type="radio" name="quality" value="reduced" /><span><b>Reduced</b><small>200 DPI</small></span></label>
+        <label class="chip"><input type="radio" name="quality" value="minimum" /><span><b>Minimum</b><small>110 DPI</small></span></label>
+      </div>
+      <p class="hint hint-warn" id="compressOffNote" hidden>Photos keep their full resolution, so files can be very large and may fail to print.</p>
+
+      <label class="switch-row">
+        <span class="switch-text"><strong>File name footer</strong><small>You'll name the file in the next step.</small></span>
+        <input type="checkbox" role="switch" class="switch" data-footer-toggle checked />
+      </label>
+      <button type="button" class="link-btn" id="btnEditFooter">Change footer style</button>
+
+      <p class="export-summary" id="exportSummary"></p>
+      <button type="button" class="btn btn-primary btn-block btn-lg" id="btnExportGo">Save PDF…</button>
+    </div>
+  </div>
+
+  <!-- In-app dialog (confirmations, alerts, file name prompt) -->
+  <dialog class="app-dialog" id="appDialog" aria-labelledby="appDialogTitle">
+    <form method="dialog" id="appDialogForm">
+      <header class="card-head"><h2 id="appDialogTitle"></h2></header>
+      <div class="card-body">
+        <p id="appDialogMessage"></p>
+        <label class="field" id="appDialogField" hidden>
+          <span class="field-label" id="appDialogLabel">File name</span>
+          <span class="input-suffix">
+            <input id="appDialogInput" class="input" type="text" autocomplete="off" spellcheck="false" />
+            <span id="appDialogSuffix"></span>
+          </span>
+        </label>
+      </div>
+      <footer class="card-foot">
+        <button type="button" class="btn btn-secondary" id="appDialogCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="appDialogOk" value="ok">OK</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <div class="overlay drop-overlay" id="dropOverlay" hidden>
+    <div class="overlay-card">
+      <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>
+      <span>Drop photos to add them</span>
+    </div>
+  </div>
+
+  <!-- Custom right-click menu — the browser's default is suppressed app-wide. -->
+  <div class="context-menu" id="contextMenu" role="menu" hidden></div>
+
+  <div class="overlay busy-overlay" id="busyOverlay" hidden>
+    <div class="overlay-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <span id="busyText">Working…</span>
+    </div>
+  </div>
+
+  <!-- HEIC -> JPEG decoder (libheif compiled to wasm). Loaded on demand. -->
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
+  <!-- PDF export -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
+  <!-- DOCX export -->
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js" defer></script>
+  <!-- File saver -->
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js" defer></script>
+  <!-- Office.js -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+  <script src="layout.js?v=3" defer></script>
+  <script src="borders.js?v=3" defer></script>
+  <script src="app.js?v=3" defer></script>
+
+  <!-- Register the service worker for offline use. -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js")
+          .then(() => console.log("[Cutline Studio] Service worker registered — offline ready"))
+          .catch((e) => console.warn("[Cutline Studio] SW registration failed:", e));
+      });
+    }
+  </script>
+</body>
+</html>

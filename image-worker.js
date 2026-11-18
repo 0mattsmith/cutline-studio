@@ -12,7 +12,7 @@
  * DevTools → Console.
  */
 
-const LIBHEIF_URL = "https://cdn.jsdelivr.net/npm/libheif-js@1.19.8/libheif-wasm/libheif-bundle.js";
+const LIBHEIF_URL = "./vendor/libheif-bundle.js";
 
 function log(...args)  { try { console.log("[image-worker]", ...args); } catch (_) {} }
 function warn(...args) { try { console.warn("[image-worker]", ...args); } catch (_) {} }

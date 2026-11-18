@@ -1,0 +1,9 @@
+{
+  "version": "1.1.0",
+  "versionCode": 2,
+  "releasedAt": "2026-11-18T11:30:00Z",
+  "notes": "Android tablet (Honor Pad 10) & phone support, GitHub APK builds, two-finger pinch-to-zoom, and automatic update checker.",
+  "repo": "0mattsmith/cutline-studio",
+  "apkAssetPrefix": "CutlineStudio-",
+  "releasesUrl": "https://github.com/0mattsmith/cutline-studio/releases"
+}

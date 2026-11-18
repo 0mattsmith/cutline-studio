@@ -1,0 +1,112 @@
+name: Build & Release Android APK
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "version.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version metadata
+        id: meta
+        run: |
+          VERSION="$(jq -r .version version.json)"
+          NOTES="$(jq -r .notes version.json)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/heads/* ]]; then
+            if gh release view "${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        if: steps.check.outputs.skip != 'true'
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        if: steps.check.outputs.skip != 'true'
+        run: yes | sdkmanager --licenses || true
+
+      - name: Set up Gradle
+        if: steps.check.outputs.skip != 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Prepare signing keystore
+        if: steps.check.outputs.skip != 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p android/keystore
+          printf '%s' "$KEYSTORE_B64" | base64 -d > android/keystore/cutline-release.jks
+
+      - name: Build signed release APK
+        if: steps.check.outputs.skip != 'true'
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: keystore/cutline-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Prepare APK artifact
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          APK_OUT="CutlineStudio-${{ steps.meta.outputs.tag }}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$APK_OUT"
+          echo "apk_path=$APK_OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CutlineStudio-${{ steps.meta.outputs.tag }}-apk
+          path: CutlineStudio-${{ steps.meta.outputs.tag }}.apk
+
+      - name: Publish GitHub Release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          APK="CutlineStudio-${TAG}.apk"
+          NOTES="${{ steps.meta.outputs.notes }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --title "Cutline Studio $TAG" \
+              --notes "$NOTES" \
+              --target "${{ github.sha }}"
+          fi

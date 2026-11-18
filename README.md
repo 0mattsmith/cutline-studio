@@ -1,43 +1,37 @@
-# PhotoGrid (web)
+# Cutline Studio
 
-A photo layout studio: drag photos in, arrange them in a customisable grid (default 4 × 5), crop each photo to a square cell (default 4.4 cm × 4.4 cm), add cutting borders and a name footer, then export a print-ready PDF or Word file.
+A photo layout studio: drag or pick photos, arrange them in a customisable grid (default 4 × 5), crop each photo to a square cell (default 4.4 cm × 4.4 cm), add cutting borders and a name footer, then export a print-ready PDF or Word file.
+
+Runs as:
+- **Installable PWA** (Android phones & tablets including Honor Pad 10, iPadOS/iOS, Windows, macOS, Linux) with seamless automatic updates from GitHub Pages.
+- **Native Android APK** (published automatically via GitHub Releases) with offline-first bundled assets and built-in GitHub release version checker & updater.
+- **Microsoft Word Add-in** (Desktop / Web Word ribbon button via `manifest-prod.xml`).
 
 ## Privacy
 
-**Your photos never leave this device.** Everything — decoding HEIC, cropping, generating PDF/DOCX — runs inside your browser. There is no server, no upload, no analytics, no telemetry. The only network requests the page ever makes are to load the app code itself (HTML/CSS/JS and a handful of library files), and after the first visit those are cached, so subsequent loads make zero network requests for your photos or anything else.
+**Your photos never leave this device.** Everything — decoding HEIC, cropping, generating PDF/DOCX — runs locally on-device. There is no upload server, no analytics, and no telemetry; all runtime libraries are vendored directly in `vendor/`.
 
-You can verify this yourself by opening DevTools → Network while you drop photos in. Nothing fires.
+## Offline & Auto-Updates
 
-## Offline
-
-PhotoGrid is a fully installable PWA.
+Cutline Studio is a fully installable PWA and standalone Android APK.
 
 **To install:**
 
-- **Chrome / Edge / Brave (desktop or Android):** an "Install app" button appears in the top bar once the page passes the install criteria (manifest + service worker + a few seconds of engagement). You can also use the browser's address-bar install icon, or menu → "Install PhotoGrid".
-- **Safari (iOS / iPadOS):** Share → "Add to Home Screen". A tip explaining this appears the first time you visit on an iOS device.
-- **Safari (macOS):** File → "Add to Dock" (Safari 17+).
-- **Firefox:** doesn't currently expose install for normal sites; use Chrome/Edge if you want to install.
+- **Android (Chrome / Edge, phones & tablets e.g. Honor Pad 10):** tap **Install app** in the top bar (or browser menu → *Install app*), or download the latest signed `.apk` from [GitHub Releases](https://github.com/0mattsmith/cutline-studio/releases).
+- **Windows / macOS (Chrome / Edge):** click the address-bar install icon or **Install app** button.
+- **Safari (iOS / iPadOS):** Share → **Add to Home Screen**.
+- **Safari (macOS):** File → **Add to Dock**.
 
-Once installed:
+**Automatic updates:**
 
-- Runs in its own standalone window, no browser chrome.
-- The app shell and every CDN library are cached by a service worker, so it loads and works fully **with no internet connection**.
-- A tiny dot in the top-right shows your connection state — green = online, grey + "offline" label = offline. Either way, the app works the same.
+- **PWA:** checks `version.json` and the Service Worker on launch, when returning to the app, and periodically; applies updates seamlessly when idle (or prompts with **Update now** if photos are currently loaded).
+- **Android APK:** automatically checks GitHub Releases on launch, downloads newer `.apk` releases in the background on Wi-Fi, and prompts with a one-tap **Install** (tap the version badge `vX.Y.Z` anytime to view status or check manually).
 
-**App icons** are provided as 192 px and 512 px PNGs, plus a maskable variant so the app looks right under Android's adaptive-icon mask, plus an SVG that scales to any size.
+## Releasing a new version (PWA + Android APK)
 
-## Quick deploy with the GitHub CLI
-
-```
-bash deploy.sh photogrid
-```
-
-This creates a public GitHub repo named `photogrid`, pushes the code, and enables GitHub Pages via the included Actions workflow. The first deploy takes ~30–60 s.
-
-For a private repo: `bash deploy.sh photogrid private`.
-
-Once it's up, your site is at `https://<your-username>.github.io/photogrid/`. Any later push to `main` redeploys automatically.
+1. Run `node scripts/bump-version.mjs 1.2.0 "Your release notes"` (keeps `version.json`, `package.json`, `app.js`, `index.html`, `service-worker.js`, and Android `versionName`/`versionCode` in sync).
+2. Commit and push to `main` (e.g. `bash update.sh "Release v1.2.0"`).
+3. GitHub Actions automatically deploys the updated PWA to GitHub Pages and builds, signs, and publishes `CutlineStudio-v1.2.0.apk` to GitHub Releases.
 
 ## Running locally
 
@@ -88,11 +82,7 @@ or any other simple static server (`npx serve`, `caddy file-server`, etc.).
 
 ## Tech
 
-- Static HTML/CSS/JS — no build step.
+- Static HTML/CSS/JS — no web build step.
 - `layout.js` works out page geometry (orientation, grid, footer position) and `borders.js` describes the border styles; both are shared by the preview, the PDF export and the Word export.
-- `heic2any` for HEIC decode (libheif/WASM).
-- `jsPDF` for PDF export.
-- `docx` (`docx.js`) for Word export.
-- `file-saver` for the download.
-
-All libraries load from jsDelivr CDN.
+- Local vendored libraries in `vendor/` (no external runtime CDN dependencies): `libheif-js` (WASM HEIC decode), `jsPDF` (PDF export), `docx` (Word export), and `file-saver`.
+- `android/` hosts a lightweight Kotlin + `WebViewAssetLoader` wrapper supporting Android phones and tablets (e.g. Honor Pad 10), native Downloads export/share, and GitHub Release self-updates.

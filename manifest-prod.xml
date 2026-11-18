@@ -6,7 +6,7 @@
   xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
   
-  <Id>b7c85116-2433-41c1-90a8-b638bb39c639</Id>
+  <Id>862565c7-62cb-46b5-b219-e8a0a3fe4aca</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>Cutline Studio</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>

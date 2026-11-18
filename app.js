@@ -13,8 +13,21 @@
 
 "use strict";
 
+// Polyfill replaceChildren for older Android WebViews (Chrome < 86).
+for (const Proto of [Element.prototype, Document.prototype, DocumentFragment.prototype]) {
+  if (Proto && typeof Proto.replaceChildren !== "function") {
+    Proto.replaceChildren = function (...nodes) {
+      this.textContent = "";
+      if (nodes.length) this.append(...nodes);
+    };
+  }
+}
+
 const Layout = window.CutlineStudioLayout;
 const Borders = window.CutlineStudioBorders;
+
+const APP_VERSION = "1.1.0";
+const REPO_VERSION_URL = "https://0mattsmith.github.io/cutline-studio/version.json";
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -245,16 +258,40 @@ const els = {
   dlgOk:      $("appDialogOk"),
   dlgCancel:  $("appDialogCancel"),
 
-  toast:         $("toast"),
-  busy:          $("busyOverlay"),
-  busyText:      $("busyText"),
-  netIndicator:  $("netIndicator"),
-  btnInstall:    $("btnInstall"),
-  iosInstallTip: $("iosInstallTip"),
-  btnDismissIosTip: $("btnDismissIosTip"),
-  contextMenu:   $("contextMenu"),
+  toast:             $("toast"),
+  toastText:         $("toastText"),
+  toastBtn:          $("toastBtn"),
+  busy:              $("busyOverlay"),
+  busyText:          $("busyText"),
+  netIndicator:      $("netIndicator"),
+  btnInstall:        $("btnInstall"),
+  btnVersion:        $("btnVersion"),
+  versionLabel:      $("versionLabel"),
+  updateDot:         $("updateDot"),
+  updateBanner:      $("updateBanner"),
+  updateBannerText:  $("updateBannerText"),
+  btnUpdateAction:   $("btnUpdateAction"),
+  btnDismissUpdate:  $("btnDismissUpdate"),
+  updateDlg:         $("updateDialog"),
+  btnUpdateDlgClose: $("btnUpdateDlgClose"),
+  updatePlatform:    $("updatePlatform"),
+  updateCurrentVer:  $("updateCurrentVer"),
+  updateStatusText:  $("updateStatusText"),
+  updateNotesText:   $("updateNotesText"),
+  updateProgressWrap:$("updateProgressWrap"),
+  updateProgress:    $("updateProgress"),
+  updateProgressLabel:$("updateProgressLabel"),
+  updateAutoRow:     $("updateAutoRow"),
+  updateAutoDesc:    $("updateAutoDesc"),
+  ctlAutoUpdate:     $("ctlAutoUpdate"),
+  btnCheckUpdates:   $("btnCheckUpdates"),
+  btnApplyUpdate:    $("btnApplyUpdate"),
+  iosInstallTip:     $("iosInstallTip"),
+  btnDismissIosTip:  $("btnDismissIosTip"),
+  contextMenu:       $("contextMenu"),
 };
 
+const isAndroidApk = !!window.CutlineAndroid;
 let isWordAddin = false;
 let isWordDialog = false;
 
@@ -274,6 +311,7 @@ if (window.Office) {
       state.settings.exportFormat = "docx";
       document.querySelector('input[name="exportFormat"][value="docx"]').checked = true;
       syncControlsFromState();
+      renderUpdaterUi();
     }
   });
 }
@@ -300,7 +338,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initDialog();
   initNetworkIndicator();
   initInstallable();
+  initUpdater();
   initContextMenu();
+  initAndroidBackHandler();
   setActivePanel(state.activePanel, true);
   render();
 });
@@ -348,11 +388,25 @@ function setBusy(text)   { els.busyText.textContent = text; }
 function hideBusy()      { els.busy.hidden = true; }
 
 let _toastTO = null;
-function showToast(text, ms = 3500) {
-  els.toast.textContent = text;
+let _toastAction = null;
+function showToast(text, opts = 3500) {
+  const options = typeof opts === "number" ? { ms: opts } : (opts || {});
+  const ms = options.ms ?? 3500;
+  els.toastText.textContent = text;
+  if (options.actionLabel && typeof options.onAction === "function") {
+    _toastAction = options.onAction;
+    els.toastBtn.textContent = options.actionLabel;
+    els.toastBtn.hidden = false;
+  } else {
+    _toastAction = null;
+    els.toastBtn.hidden = true;
+  }
   els.toast.hidden = false;
   clearTimeout(_toastTO);
-  _toastTO = setTimeout(() => { els.toast.hidden = true; }, ms);
+  _toastTO = setTimeout(() => {
+    els.toast.hidden = true;
+    _toastAction = null;
+  }, ms);
 }
 
 // ─── In-app dialog ────────────────────────────────────────────────────────
@@ -538,6 +592,7 @@ let _deferredInstallPrompt = null;
 
 function initInstallable() {
   const isStandalone =
+    isAndroidApk ||
     window.matchMedia?.("(display-mode: standalone)").matches ||
     window.navigator.standalone === true;
   if (isStandalone) {
@@ -604,6 +659,343 @@ function initNetworkIndicator() {
   window.addEventListener("online", update);
   window.addEventListener("offline", update);
   update();
+}
+
+// ─── Version checker & seamless auto-updater (PWA + Android APK) ──────────
+
+function compareSemver(a, b) {
+  const pa = String(a || "0").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || "0").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const da = pa[i] || 0;
+    const db = pb[i] || 0;
+    if (da > db) return 1;
+    if (da < db) return -1;
+  }
+  return 0;
+}
+
+const UPDATE_AUTO_KEY = "cutline:autoUpdate";
+const _updater = {
+  currentVersion: APP_VERSION,
+  status: "idle", // idle | checking | available | downloading | ready | up_to_date | error
+  latestVersion: null,
+  notes: "",
+  progress: 0,
+  swReg: null,
+  bannerDismissedVersion: null,
+  autoEnabled: true,
+};
+
+function isAutoUpdateEnabled() {
+  if (isAndroidApk && typeof window.CutlineAndroid.isAutoUpdateEnabled === "function") {
+    return !!window.CutlineAndroid.isAutoUpdateEnabled();
+  }
+  try { return localStorage.getItem(UPDATE_AUTO_KEY) !== "0"; } catch (_) { return true; }
+}
+
+function setAutoUpdateEnabled(enabled) {
+  _updater.autoEnabled = !!enabled;
+  if (isAndroidApk && typeof window.CutlineAndroid.setAutoUpdateEnabled === "function") {
+    window.CutlineAndroid.setAutoUpdateEnabled(!!enabled);
+  } else {
+    try { localStorage.setItem(UPDATE_AUTO_KEY, enabled ? "1" : "0"); } catch (_) {}
+  }
+}
+
+function renderUpdaterUi() {
+  if (!els.btnVersion) return;
+  const ver = _updater.currentVersion || APP_VERSION;
+  els.versionLabel.textContent = `v${String(ver).replace(/^v/i, "")}`;
+  els.updateCurrentVer.textContent = `v${String(ver).replace(/^v/i, "")}`;
+  els.updatePlatform.textContent = isWordAddin
+    ? "Microsoft Word Add-in"
+    : isAndroidApk
+      ? "Android App (GitHub)"
+      : "Web App / PWA";
+
+  const hasActionable = _updater.status === "available" || _updater.status === "ready";
+  els.updateDot.hidden = !hasActionable;
+  els.btnVersion.classList.toggle("has-update", hasActionable);
+
+  if (isWordAddin) {
+    els.updateBanner.hidden = true;
+    els.updateAutoRow.hidden = true;
+    els.btnCheckUpdates.hidden = true;
+    els.btnApplyUpdate.hidden = true;
+    els.updateProgressWrap.hidden = true;
+    els.updateStatusText.textContent = "Managed inside Microsoft Word.";
+    return;
+  }
+
+  els.ctlAutoUpdate.checked = isAutoUpdateEnabled();
+  els.updateAutoDesc.textContent = isAndroidApk
+    ? "Automatically check GitHub Releases and download APK updates in the background on Wi-Fi."
+    : "Automatically check the GitHub repo and apply updates when opening the app.";
+
+  const lv = _updater.latestVersion ? `v${String(_updater.latestVersion).replace(/^v/i, "")}` : "";
+  if (_updater.status === "checking") {
+    els.updateStatusText.textContent = "Checking GitHub repo for updates…";
+    els.btnApplyUpdate.hidden = true;
+    els.updateProgressWrap.hidden = true;
+  } else if (_updater.status === "downloading") {
+    const pct = clamp(Math.round(_updater.progress || 0), 0, 100);
+    els.updateStatusText.textContent = `Downloading ${lv || "update"}…`;
+    els.updateProgressWrap.hidden = false;
+    els.updateProgress.value = pct;
+    els.updateProgressLabel.textContent = `${pct}%`;
+    els.btnApplyUpdate.hidden = true;
+  } else if (_updater.status === "ready") {
+    els.updateStatusText.textContent = `${lv || "A new version"} is ready to install.`;
+    els.updateProgressWrap.hidden = true;
+    els.btnApplyUpdate.hidden = false;
+    els.btnApplyUpdate.textContent = isAndroidApk ? `Install ${lv}` : `Update to ${lv}`;
+  } else if (_updater.status === "available") {
+    els.updateStatusText.textContent = `${lv || "A new version"} is available from the GitHub repo.`;
+    els.updateProgressWrap.hidden = true;
+    els.btnApplyUpdate.hidden = false;
+    els.btnApplyUpdate.textContent = isAndroidApk ? `Download & Install ${lv}` : `Update to ${lv}`;
+  } else if (_updater.status === "error") {
+    els.updateStatusText.textContent = _updater.notes || "Could not reach update server right now.";
+    els.updateProgressWrap.hidden = true;
+    els.btnApplyUpdate.hidden = true;
+  } else {
+    els.updateStatusText.textContent = _updater.status === "up_to_date"
+      ? `You're on the latest version (${els.versionLabel.textContent}).`
+      : `Running ${els.versionLabel.textContent}.`;
+    els.updateProgressWrap.hidden = true;
+    els.btnApplyUpdate.hidden = true;
+  }
+
+  if (_updater.notes && _updater.status !== "error") {
+    els.updateNotesText.textContent = _updater.notes;
+    els.updateNotesText.hidden = false;
+  } else {
+    els.updateNotesText.hidden = true;
+  }
+
+  const showBanner =
+    !isWordAddin &&
+    (_updater.status === "ready" || _updater.status === "available" || _updater.status === "downloading") &&
+    _updater.bannerDismissedVersion !== _updater.latestVersion;
+  els.updateBanner.hidden = !showBanner;
+  if (showBanner) {
+    if (_updater.status === "downloading") {
+      els.updateBannerText.textContent = `Downloading Cutline Studio ${lv} (${Math.round(_updater.progress || 0)}%)…`;
+      els.btnUpdateAction.hidden = true;
+    } else if (_updater.status === "ready") {
+      els.updateBannerText.textContent = `Cutline Studio ${lv} is ready`;
+      els.btnUpdateAction.hidden = false;
+      els.btnUpdateAction.textContent = isAndroidApk ? "Install" : "Update now";
+    } else {
+      els.updateBannerText.textContent = `Cutline Studio ${lv} is available`;
+      els.btnUpdateAction.hidden = false;
+      els.btnUpdateAction.textContent = isAndroidApk ? "Download" : "Update now";
+    }
+  }
+}
+
+async function applyAvailableUpdate() {
+  if (isAndroidApk) {
+    window.CutlineAndroid?.applyUpdate?.();
+    return;
+  }
+  const reg = _updater.swReg;
+  if (reg?.waiting) {
+    reg.waiting.postMessage("SKIP_WAITING");
+  }
+  try { sessionStorage.setItem("cutline:justUpdated", _updater.latestVersion || ""); } catch (_) {}
+  window.location.reload();
+}
+
+async function checkForUpdates(manual = false) {
+  if (isWordAddin) return;
+  if (isAndroidApk) {
+    _updater.status = "checking";
+    renderUpdaterUi();
+    window.CutlineAndroid?.checkForUpdates?.(!!manual);
+    return;
+  }
+
+  if (!navigator.onLine) {
+    if (manual) {
+      _updater.status = "error";
+      _updater.notes = "Offline — connect to the internet to check for updates.";
+      renderUpdaterUi();
+    }
+    return;
+  }
+
+  _updater.status = "checking";
+  if (manual) _updater.notes = "";
+  renderUpdaterUi();
+
+  try {
+    if (_updater.swReg) {
+      await _updater.swReg.update().catch(() => {});
+    }
+    let res = await fetch(`./version.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) {
+      res = await fetch(`${REPO_VERSION_URL}?t=${Date.now()}`, { cache: "no-store" });
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const remoteVer = String(data.version || APP_VERSION).replace(/^v/i, "");
+    const hasWaitingSw = !!_updater.swReg?.waiting;
+    const isNewer = compareSemver(remoteVer, _updater.currentVersion) > 0;
+
+    if (isNewer || hasWaitingSw) {
+      _updater.latestVersion = isNewer ? remoteVer : _updater.currentVersion;
+      _updater.notes = data.notes || "";
+      _updater.status = "ready";
+      _updater.bannerDismissedVersion = null;
+      renderUpdaterUi();
+
+      // Seamless automatic update when idle with no photos open.
+      if (isAutoUpdateEnabled() && state.images.length === 0 && !_exporting) {
+        await applyAvailableUpdate();
+      }
+      return;
+    }
+
+    _updater.latestVersion = _updater.currentVersion;
+    _updater.notes = data.notes || "";
+    _updater.status = "up_to_date";
+    renderUpdaterUi();
+  } catch (e) {
+    console.warn("[Cutline Studio] Update check failed:", e);
+    _updater.status = manual ? "error" : "idle";
+    _updater.notes = manual ? "Couldn't check GitHub Pages for updates." : "";
+    renderUpdaterUi();
+  }
+}
+
+function initUpdater() {
+  if (isAndroidApk && typeof window.CutlineAndroid.getInstalledVersion === "function") {
+    _updater.currentVersion = window.CutlineAndroid.getInstalledVersion() || APP_VERSION;
+  }
+
+  try {
+    const justUpdated = sessionStorage.getItem("cutline:justUpdated");
+    if (justUpdated) {
+      sessionStorage.removeItem("cutline:justUpdated");
+      showToast(`Updated to Cutline Studio v${String(justUpdated).replace(/^v/i, "")}`);
+    }
+  } catch (_) {}
+
+  els.toastBtn.addEventListener("click", () => {
+    const fn = _toastAction;
+    els.toast.hidden = true;
+    _toastAction = null;
+    fn?.();
+  });
+
+  els.btnVersion.addEventListener("click", () => {
+    renderUpdaterUi();
+    if (!els.updateDlg.open) {
+      els.updateDlg.showModal();
+      els.btnCheckUpdates.focus();
+    }
+    if (!isWordAddin && (_updater.status === "idle" || _updater.status === "up_to_date" || _updater.status === "error")) {
+      checkForUpdates(true);
+    }
+  });
+  els.btnUpdateDlgClose.addEventListener("click", () => {
+    if (els.updateDlg.open) els.updateDlg.close();
+  });
+  els.updateDlg.addEventListener("click", (e) => {
+    if (e.target === els.updateDlg) els.updateDlg.close();
+  });
+  els.btnCheckUpdates.addEventListener("click", () => checkForUpdates(true));
+  els.btnApplyUpdate.addEventListener("click", applyAvailableUpdate);
+  els.btnUpdateAction.addEventListener("click", applyAvailableUpdate);
+  els.btnDismissUpdate.addEventListener("click", () => {
+    _updater.bannerDismissedVersion = _updater.latestVersion;
+    renderUpdaterUi();
+  });
+  els.ctlAutoUpdate.addEventListener("change", () => {
+    setAutoUpdateEnabled(els.ctlAutoUpdate.checked);
+    renderUpdaterUi();
+  });
+
+  if (isAndroidApk) {
+    window.__cutlineOnUpdateState = (payload) => {
+      try {
+        const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+        if (!data) return;
+        if (data.currentVersion) _updater.currentVersion = data.currentVersion;
+        if (data.status) _updater.status = data.status;
+        if (data.latestVersion !== undefined) _updater.latestVersion = data.latestVersion;
+        if (data.notes !== undefined) _updater.notes = data.notes || "";
+        if (data.progress !== undefined) _updater.progress = data.progress;
+        if (data.status === "available" || data.status === "ready") {
+          _updater.bannerDismissedVersion = null;
+        }
+        renderUpdaterUi();
+      } catch (e) {
+        console.warn("[Cutline Studio] Bad update state payload:", e);
+      }
+    };
+    renderUpdaterUi();
+    setTimeout(() => checkForUpdates(false), 1200);
+    return;
+  }
+
+  if (!isWordAddin && !window.Office && "serviceWorker" in navigator) {
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloading) return;
+      if (isAutoUpdateEnabled() && state.images.length === 0 && !_exporting) {
+        reloading = true;
+        try { sessionStorage.setItem("cutline:justUpdated", _updater.latestVersion || ""); } catch (_) {}
+        window.location.reload();
+      } else {
+        _updater.status = "ready";
+        _updater.bannerDismissedVersion = null;
+        renderUpdaterUi();
+      }
+    });
+
+    navigator.serviceWorker.register("service-worker.js").then((reg) => {
+      _updater.swReg = reg;
+      reg.addEventListener("updatefound", () => {
+        const installing = reg.installing;
+        if (!installing) return;
+        installing.addEventListener("statechange", () => {
+          if (installing.state === "installed" && navigator.serviceWorker.controller) {
+            _updater.status = "ready";
+            _updater.bannerDismissedVersion = null;
+            renderUpdaterUi();
+          }
+        });
+      });
+      checkForUpdates(false);
+    }).catch((e) => console.warn("[Cutline Studio] SW registration failed:", e));
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") checkForUpdates(false);
+    });
+    window.addEventListener("online", () => checkForUpdates(false));
+    setInterval(() => checkForUpdates(false), 30 * 60 * 1000);
+  }
+
+  renderUpdaterUi();
+}
+
+function initAndroidBackHandler() {
+  window.__cutlineOnBackPressed = () => {
+    if (els.updateDlg?.open) { els.updateDlg.close(); return true; }
+    if (els.dlg?.open) { closeDialog(false); return true; }
+    if (!els.exportCard.hidden) { closeExportCard(); return true; }
+    if (!els.contextMenu.hidden) { hideContextMenu(); return true; }
+    const isCompactViewport = window.innerWidth <= 760 || (window.innerWidth <= 1320 && window.innerHeight > window.innerWidth);
+    if (isCompactViewport && state.panelOpen) {
+      setActivePanel(state.activePanel, false);
+      return true;
+    }
+    return false;
+  };
 }
 
 // ─── Settings → controls ──────────────────────────────────────────────────
@@ -1696,6 +2088,28 @@ function attachCanvasHandlers() {
     setViewZoom(current * Math.exp(-e.deltaY * 0.0025));
   }, { passive: false });
 
+  // Two-finger touch pinch-to-zoom on canvas (tablets & phones).
+  let _canvasPinch = null;
+  const touchDist = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  els.previewScroll.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) {
+      _canvasPinch = {
+        dist: Math.max(10, touchDist(e.touches[0], e.touches[1])),
+        zoom: _lastScale / PX_PER_MM,
+      };
+    } else {
+      _canvasPinch = null;
+    }
+  }, { passive: true });
+  els.previewScroll.addEventListener("touchmove", (e) => {
+    if (!_canvasPinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const d = Math.max(10, touchDist(e.touches[0], e.touches[1]));
+    setViewZoom(_canvasPinch.zoom * (d / _canvasPinch.dist));
+  }, { passive: false });
+  els.previewScroll.addEventListener("touchend", () => { _canvasPinch = null; });
+  els.previewScroll.addEventListener("touchcancel", () => { _canvasPinch = null; });
+
   // Re-fit when the canvas changes size (window resize, panel opened/closed).
   if (typeof ResizeObserver === "function") {
     new ResizeObserver(() => schedulePreviewRedraw()).observe(els.previewScroll);
@@ -1764,6 +2178,8 @@ function resetCrop(im) {
 let _drag = null;
 function attachCropDragHandlers() {
   const frame = els.cropFrame;
+  const pointers = new Map();
+  let _pinch = null;
 
   const begin = (clientX, clientY) => {
     const im = getSelectedImage();
@@ -1775,6 +2191,17 @@ function attachCropDragHandlers() {
       imgW: im.w, imgH: im.h,
       zoom: Math.max(CROP_ZOOM_MIN, im.cropZoom || 1),
       id: im.id,
+    };
+  };
+  const beginPinch = () => {
+    if (pointers.size !== 2) return;
+    const im = getSelectedImage();
+    if (!im || im.error || !im.previewUrl) return;
+    const pts = Array.from(pointers.values());
+    _drag = null;
+    _pinch = {
+      dist: Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y)),
+      zoom: Math.max(CROP_ZOOM_MIN, im.cropZoom || 1),
     };
   };
   const move = (clientX, clientY) => {
@@ -1805,19 +2232,38 @@ function attachCropDragHandlers() {
     };
     cropChanged(im);
   };
-  const end = () => { _drag = null; };
+  const endPointer = (e) => {
+    pointers.delete(e.pointerId);
+    _pinch = null;
+    if (pointers.size === 1) {
+      const [pt] = pointers.values();
+      begin(pt.x, pt.y);
+    } else if (pointers.size === 0) {
+      _drag = null;
+    }
+  };
 
   frame.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     e.preventDefault();
-    frame.setPointerCapture?.(e.pointerId);
-    begin(e.clientX, e.clientY);
+    try { frame.setPointerCapture?.(e.pointerId); } catch (_) {}
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) begin(e.clientX, e.clientY);
+    else if (pointers.size === 2) beginPinch();
   });
   frame.addEventListener("pointermove", (e) => {
-    if (_drag) move(e.clientX, e.clientY);
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2 && _pinch) {
+      const pts = Array.from(pointers.values());
+      const dist = Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+      setCropZoom(_pinch.zoom * (dist / _pinch.dist));
+    } else if (pointers.size === 1 && _drag) {
+      move(e.clientX, e.clientY);
+    }
   });
-  frame.addEventListener("pointerup", end);
-  frame.addEventListener("pointercancel", end);
+  frame.addEventListener("pointerup", endPointer);
+  frame.addEventListener("pointercancel", endPointer);
 
   els.btnResetCrop.addEventListener("click", () => resetCrop(getSelectedImage()));
   els.btnZoomIn.addEventListener("click", () => adjustZoom(+CROP_ZOOM_STEP));
@@ -1901,7 +2347,7 @@ async function chooseSaveTarget(kind) {
   const type = FILE_TYPES[kind];
   const base = state.lastFileName || defaultBaseName();
 
-  if (typeof window.showSaveFilePicker === "function") {
+  if (!isAndroidApk && typeof window.showSaveFilePicker === "function") {
     try {
       const handle = await window.showSaveFilePicker({
         id: "photogrid-export",
@@ -1911,7 +2357,7 @@ async function chooseSaveTarget(kind) {
         types: [{ description: type.description, accept: { [type.mime]: [type.ext] } }],
       });
       const name = stripExtension(handle.name, type.ext) || base;
-      return { name, fileName: handle.name, handle };
+      return { name, fileName: handle.name, handle, mime: type.mime };
     } catch (e) {
       if (e?.name === "AbortError") return null;
       console.warn("[Cutline Studio] Save dialog unavailable, asking for a name instead:", e);
@@ -1934,10 +2380,30 @@ async function chooseSaveTarget(kind) {
   if (!result.ok) return null;
   const name = cleanBaseName(result.value, type.ext);
   if (!name) return null;
-  return { name, fileName: name + type.ext, handle: null };
+  return { name, fileName: name + type.ext, handle: null, mime: type.mime };
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const str = String(reader.result || "");
+      const idx = str.indexOf(",");
+      resolve(idx >= 0 ? str.slice(idx + 1) : str);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read file data"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function writeOutput(target, blob) {
+  if (isAndroidApk && typeof window.CutlineAndroid?.saveExportedFile === "function") {
+    const base64 = await blobToBase64(blob);
+    const raw = window.CutlineAndroid.saveExportedFile(base64, target.fileName, target.mime || blob.type || "application/octet-stream");
+    const res = JSON.parse(raw);
+    if (!res?.ok) throw new Error(res?.error || "Could not save file on Android");
+    return res;
+  }
   if (target.handle) {
     const writable = await target.handle.createWritable();
     try {
@@ -1947,11 +2413,11 @@ async function writeOutput(target, blob) {
       try { await writable.abort?.(); } catch (_) {}
       throw e;
     }
-    return;
+    return null;
   }
   if (typeof window.saveAs === "function") {
     window.saveAs(blob, target.fileName);
-    return;
+    return null;
   }
   const url = URL.createObjectURL(blob);
   const a = el("a");
@@ -1961,6 +2427,7 @@ async function writeOutput(target, blob) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return null;
 }
 
 async function insertIntoWord(blob, footerText) {
@@ -2093,12 +2560,22 @@ async function exportDocument(kind) {
       showToast(msg);
     } else {
       setBusy("Saving…");
-      await writeOutput(target, blob);
+      const androidResult = await writeOutput(target, blob);
       state.lastFileName = target.name;
-      let msg = `Saved ${target.fileName} (${formatBytes(blob.size)}, ${plural(pages.length, "page")}).`;
+      let msg = androidResult?.path
+        ? `Saved to ${androidResult.path} (${formatBytes(blob.size)}, ${plural(pages.length, "page")}).`
+        : `Saved ${target.fileName} (${formatBytes(blob.size)}, ${plural(pages.length, "page")}).`;
       if (failed) msg += ` ${plural(failed, "photo")} couldn't be added.`;
       setStatus(msg);
-      showToast(msg);
+      if (androidResult && typeof window.CutlineAndroid?.shareLastExport === "function") {
+        showToast(msg, {
+          ms: 7000,
+          actionLabel: "Open / Share",
+          onAction: () => window.CutlineAndroid.shareLastExport(),
+        });
+      } else {
+        showToast(msg);
+      }
     }
   } catch (e) {
     console.error(e);

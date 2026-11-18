@@ -1,17 +1,16 @@
 /*
- * Cutline Studio service worker — makes the app usable offline after first load.
+ * Cutline Studio service worker — makes the PWA usable offline after first load.
  *
  *   Strategy:
- *     • App shell (HTML/CSS/JS/icon/manifest): stale-while-revalidate, so the
- *       app boots instantly from cache and updates in the background.
- *     • CDN libraries (heic2any / jsPDF / docx / file-saver): cache-first.
- *       These pin to specific versions so they never need to change.
+ *     • version.json: network-first (no-store) so update checks always read the latest release.
+ *     • App shell & vendored libs (HTML/CSS/JS/icons/manifest): stale-while-revalidate
+ *       with ignoreSearch matching so cache-bust query strings work seamlessly.
  *     • Everything else: try network, fall back to cache.
  *
  * Bump CACHE_VERSION when shipping any asset change so old caches get pruned.
  */
 
-const CACHE_VERSION = "v16";
+const CACHE_VERSION = "v17";
 const CACHE_NAME = `cutline-studio-${CACHE_VERSION}`;
 
 const APP_SHELL = [
@@ -24,32 +23,22 @@ const APP_SHELL = [
   "./image-worker.js",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./icon-maskable.svg",
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-512.png",
-];
-
-const CDN_LIBS = [
-  "https://cdn.jsdelivr.net/npm/libheif-js@1.19.8/libheif-wasm/libheif-bundle.js",
-  "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js",
-  "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
-  "https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js",
-  "https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js",
+  "./apple-touch-icon.png",
+  "./vendor/libheif-bundle.js",
+  "./vendor/jspdf.umd.min.js",
+  "./vendor/docx.umd.min.js",
+  "./vendor/FileSaver.min.js",
 ];
 
 // ─── install ──────────────────────────────────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    // App shell must succeed
     await cache.addAll(APP_SHELL);
-    // CDN libs are best-effort — if one fails (offline first install), keep going
-    await Promise.all(CDN_LIBS.map(async (url) => {
-      try {
-        const res = await fetch(url, { mode: "cors" });
-        if (res.ok) await cache.put(url, res);
-      } catch (_) { /* will be cached lazily on first real fetch */ }
-    }));
     self.skipWaiting();
   })());
 });
@@ -69,44 +58,32 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-  const isAppShell = url.origin === self.location.origin;
-  const isPinnedLib = CDN_LIBS.includes(req.url);
-
-  if (isAppShell) {
-    // Stale-while-revalidate
-    event.respondWith((async () => {
-      const cache = await caches.open(CACHE_NAME);
-      const cached = await cache.match(req);
-      const networkPromise = fetch(req).then(res => {
-        if (res && res.ok) cache.put(req, res.clone());
-        return res;
-      }).catch(() => null);
-      return cached || (await networkPromise) || new Response("Offline", { status: 503 });
-    })());
+  if (url.origin !== self.location.origin) {
+    event.respondWith(fetch(req).catch(() => caches.match(req)));
     return;
   }
 
-  if (isPinnedLib) {
-    // Cache-first — pinned versions never change
-    event.respondWith((async () => {
-      const cache = await caches.open(CACHE_NAME);
-      const cached = await cache.match(req);
-      if (cached) return cached;
-      try {
-        const res = await fetch(req);
-        if (res && res.ok) cache.put(req, res.clone());
-        return res;
-      } catch (e) {
-        return new Response("Library unavailable offline", { status: 503 });
+  // Always check network for version.json so the update checker sees new releases immediately.
+  if (url.pathname.endsWith("/version.json")) {
+    event.respondWith(
+      fetch(new Request(req, { cache: "no-store" })).catch(() => caches.match(req, { ignoreSearch: true }))
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for local app shell & vendored assets
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(req, { ignoreSearch: true });
+    const networkPromise = fetch(req).then((res) => {
+      if (res && res.ok) {
+        const cleanUrl = url.origin + url.pathname;
+        cache.put(cleanUrl, res.clone());
       }
-    })());
-    return;
-  }
-
-  // Anything else (e.g., dynamically loaded resources): network, fall back to cache
-  event.respondWith(
-    fetch(req).catch(() => caches.match(req))
-  );
+      return res;
+    }).catch(() => null);
+    return cached || (await networkPromise) || new Response("Offline", { status: 503 });
+  })());
 });
 
 // Allow the page to trigger an immediate activation

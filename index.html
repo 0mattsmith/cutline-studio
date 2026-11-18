@@ -10,7 +10,7 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Cutline Studio" />
@@ -48,6 +48,7 @@
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4.6M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 14.5 4.6M20 20v-4.5h-4.5"/></symbol>
   </svg>
 
   <header class="topbar">
@@ -75,12 +76,27 @@
       <button id="btnInstall" type="button" class="topbar-btn" hidden>
         <svg class="icon" aria-hidden="true"><use href="#i-install"/></svg><span>Install app</span>
       </button>
+      <button id="btnVersion" type="button" class="version-pill" title="Version &amp; updates" aria-haspopup="dialog" aria-controls="updateDialog">
+        <span id="versionLabel">v1.1.0</span>
+        <span class="update-dot" id="updateDot" hidden aria-hidden="true"></span>
+      </button>
       <span class="net-indicator" id="netIndicator" title=""></span>
       <button id="btnExportOpen" type="button" class="topbar-btn topbar-btn-primary" aria-haspopup="dialog" aria-expanded="false" aria-controls="exportCard">
         <svg class="icon" aria-hidden="true"><use href="#i-export"/></svg><span>Export</span>
       </button>
     </div>
   </header>
+
+  <!-- App / repo update banner -->
+  <div class="update-banner" id="updateBanner" hidden>
+    <span class="update-banner-text" id="updateBannerText">Update available</span>
+    <div class="update-banner-actions">
+      <button id="btnUpdateAction" type="button" class="btn btn-primary btn-sm">Update now</button>
+      <button id="btnDismissUpdate" type="button" class="icon-btn" aria-label="Dismiss update notice">
+        <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+      </button>
+    </div>
+  </div>
 
   <!-- iOS Safari install help (Safari doesn't support beforeinstallprompt) -->
   <div class="ios-install-tip" id="iosInstallTip" hidden>
@@ -456,7 +472,47 @@
     </form>
   </dialog>
 
-  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <!-- Updates & App info dialog -->
+  <dialog class="app-dialog" id="updateDialog" aria-labelledby="updateDialogTitle">
+    <form method="dialog" id="updateDialogForm">
+      <header class="card-head">
+        <h2 id="updateDialogTitle">Cutline Studio Updates</h2>
+        <button type="button" class="icon-btn" id="btnUpdateDlgClose" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </header>
+      <div class="card-body">
+        <div class="update-meta">
+          <span class="update-platform" id="updatePlatform">Web App</span>
+          <span class="update-ver" id="updateCurrentVer">v1.1.0</span>
+        </div>
+        <p id="updateStatusText" class="update-status-text">Checking repository for updates…</p>
+        <p id="updateNotesText" class="hint" hidden></p>
+        <div class="update-progress-wrap" id="updateProgressWrap" hidden>
+          <progress id="updateProgress" max="100" value="0"></progress>
+          <span id="updateProgressLabel" class="hint">0%</span>
+        </div>
+        <label class="switch-row" id="updateAutoRow">
+          <span class="switch-text">
+            <strong>Automatic seamless updates</strong>
+            <small id="updateAutoDesc">Automatically check the GitHub repo and keep Cutline Studio up to date.</small>
+          </span>
+          <input id="ctlAutoUpdate" type="checkbox" role="switch" class="switch" checked />
+        </label>
+      </div>
+      <footer class="card-foot">
+        <button type="button" class="btn btn-secondary" id="btnCheckUpdates">
+          <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span>Check now</span>
+        </button>
+        <button type="button" class="btn btn-primary" id="btnApplyUpdate" hidden>Update now</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span id="toastText"></span>
+    <button id="toastBtn" type="button" class="toast-btn" hidden></button>
+  </div>
 
   <div class="overlay drop-overlay" id="dropOverlay" hidden>
     <div class="overlay-card">
@@ -475,30 +531,33 @@
     </div>
   </div>
 
-  <!-- HEIC -> JPEG decoder (libheif compiled to wasm). Loaded on demand. -->
-  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
   <!-- PDF export -->
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
+  <script src="./vendor/jspdf.umd.min.js" defer></script>
   <!-- DOCX export -->
-  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js" defer></script>
+  <script src="./vendor/docx.umd.min.js" defer></script>
   <!-- File saver -->
-  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js" defer></script>
-  <!-- Office.js -->
-  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-
-  <script src="layout.js?v=3" defer></script>
-  <script src="borders.js?v=3" defer></script>
-  <script src="app.js?v=3" defer></script>
-
-  <!-- Register the service worker for offline use. -->
+  <script src="./vendor/FileSaver.min.js" defer></script>
+  <!-- Office.js (loaded only when hosted inside Microsoft Office on desktop/web) -->
   <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("service-worker.js")
-          .then(() => console.log("[Cutline Studio] Service worker registered — offline ready"))
-          .catch((e) => console.warn("[Cutline Studio] SW registration failed:", e));
-      });
-    }
+    (function () {
+      var isAndroid = !!window.CutlineAndroid || location.hostname === "appassets.androidplatform.net" || /Android/i.test(navigator.userAgent || "");
+      var hasHostInfo = false;
+      try { hasHostInfo = !!sessionStorage.getItem("hostInfoValue"); } catch (_) {}
+      var maybeOffice = !isAndroid && (
+        location.search.indexOf("_host_Info") !== -1 ||
+        location.search.indexOf("dialog=true") !== -1 ||
+        window.self !== window.top ||
+        !!(window.chrome && window.chrome.webview) ||
+        hasHostInfo
+      );
+      if (maybeOffice) {
+        document.write('<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"><\/script>');
+      }
+    })();
   </script>
+
+  <script src="layout.js?v=4" defer></script>
+  <script src="borders.js?v=4" defer></script>
+  <script src="app.js?v=4" defer></script>
 </body>
 </html>

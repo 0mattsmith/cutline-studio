@@ -46,13 +46,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
+      - name: Accept Android SDK licenses & install SDK packages
         if: steps.check.outputs.skip != 'true'
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
-        if: steps.check.outputs.skip != 'true'
-        run: yes | sdkmanager --licenses || true
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
         if: steps.check.outputs.skip != 'true'
